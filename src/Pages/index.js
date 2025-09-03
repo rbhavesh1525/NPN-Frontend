@@ -1,0 +1,10 @@
+export { default as Dashboard } from './Dashboard.jsx';
+export { default as History } from './History.jsx';
+export { default as Login } from './Login.jsx';
+export { default as Signup } from './Signup.jsx';
+export { default as MessageGeneration } from './MessageGeneration.jsx';
+export { default as SegmentationResults } from './SegmentationResults.jsx';
+export { default as Settings } from './Settings.jsx';
+export { default as UploadData } from './UploadData.jsx';
+export { default as OTPVerification } from './OTPVerification.jsx';
+export { default as ForgotPassword } from './ForgotPassword.jsx';

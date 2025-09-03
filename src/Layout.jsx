@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/lib/utils";
 import { 
   LayoutDashboard, 
@@ -27,8 +27,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// import { User as UserEntity } from "@/entities/User";
-import { ThemeProvider, useTheme } from '@/components/providers/ThemeProvider'; // FIX: Corrected import path
+import { useAuth } from '@/contexts/AuthContext';
+import { ThemeProvider, useTheme } from '@/components/providers/ThemeProvider';
 
 const navigationItems = [
   {
@@ -60,12 +60,19 @@ const navigationItems = [
 
 function AppLayout({ children, currentPageName }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { darkMode, toggleTheme } = useTheme();
+  const { user, signOut } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
-    await UserEntity.logout();
+    try {
+      await signOut();
+      navigate('/pages/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   return (
@@ -157,7 +164,14 @@ function AppLayout({ children, currentPageName }) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium">
+                        {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                      </p>
+                      <p className="text-xs text-gray-500">{user?.email}</p>
+                    </div>
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <Link to={createPageUrl("Settings")}>
                     <DropdownMenuItem>
@@ -168,7 +182,7 @@ function AppLayout({ children, currentPageName }) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
-                    Login
+                    Logout
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

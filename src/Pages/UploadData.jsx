@@ -173,12 +173,18 @@ function UploadData() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
           <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">customer_id</div>
           <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">name</div>
-          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">email</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">gender</div>
           <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">age</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">occupation</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">city</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">account_type</div>
           <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">income</div>
-          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">account_balance</div>
-          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">credit_score</div>
-          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">last_transaction_date</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">balance</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">account_tenure</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">has_loan</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">has_credit_card</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">has_investment</div>
+          <div className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">last_marketing_response</div>
         </div>
       </div>
     </div>

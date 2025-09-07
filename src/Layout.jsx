@@ -4,9 +4,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/lib/utils";
 import { 
   LayoutDashboard, 
-  Upload, 
   Users, 
-  MessageSquare, 
+  Send, 
   History, 
   Menu,
   Sun,
@@ -42,9 +41,9 @@ const navigationItems = [
     icon: Users,
   },
   {
-    title: "Message Generation",
+    title: "Run Campaign",
     url: createPageUrl("MessageGeneration"),
-    icon: MessageSquare,
+    icon: Send,
   },
   {
     title: "History & Reports",
@@ -246,7 +245,7 @@ function AppLayout({ children, currentPageName }) {
       {/* Mobile menu overlay */}
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+          className="fixed inset-0 bg-transparent bg-opacity-10 z-10 lg:hidden"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}

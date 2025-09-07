@@ -32,11 +32,11 @@ app.add_middleware(
 
 # --- Define the Mapping to Your Exact Supabase Table Names ---
 TABLE_NAME_MAP = {
-    '1. New & Cautious': 'new_and_cautious',
-    '2. Stable Earners': 'stable_earners',
-    '3. Mid-Tier Professionals': 'mid_tier_professionals',
-    '4. Affluent Customers': 'affluent_customers',
-    '5. High-Value Elite': 'high_value_elite'
+    'New & Cautious': 'new_and_cautious',
+    'Stable Earners': 'stable_earners',
+    'Mid-Tier Professionals': 'mid_tier_professionals',
+    'Affluent Customers': 'affluent_customers',
+    'High-Value Elite': 'high_value_elite'
 }
 
 # --- Load Model and Connect to Supabase ---
@@ -150,23 +150,45 @@ async def campaign_success_webhook(request_data: dict):
                 .eq("campaign_id", campaign_id)\
                 .execute()
             
+            print(f"🔍 Campaign lookup result: {campaign_result.data}")
+            
             if campaign_result.data and len(campaign_result.data) > 0:
                 segment_name = campaign_result.data[0].get("segment_name")
                 table_name = TABLE_NAME_MAP.get(segment_name)
                 
+                print(f"🔍 Found segment: '{segment_name}', mapped table: '{table_name}'")
+                
                 if table_name:
                     try:
-                        count_result = supabase.table(table_name).select("customer_id", count="exact").execute()
+                        # Try multiple methods to count customers
+                        print(f"📧 Counting emails sent in table: {table_name}")
+                        
+                        # Method 1: Count with exact
+                        count_result = supabase.table(table_name).select("*", count="exact").execute()
                         emails_sent = count_result.count if count_result.count is not None else 0
-                        print(f"📧 Calculated {emails_sent} emails sent for {segment_name} segment")
+                        
+                        print(f"📧 Method 1 - Count result: {count_result.count}")
+                        
+                        # If Method 1 fails, try Method 2
+                        if emails_sent == 0:
+                            count_result2 = supabase.table(table_name).select("customer_id").execute()
+                            emails_sent = len(count_result2.data) if count_result2.data else 0
+                            print(f"📧 Method 2 - Manual count: {emails_sent}")
+                            
+                        print(f"📧 Final calculated {emails_sent} emails sent for {segment_name} segment")
+                        
                     except Exception as e:
                         print(f"⚠️ Error counting customers for emails_sent: {e}")
+                        print(f"⚠️ Error type: {type(e).__name__}")
                         emails_sent = 0
+                else:
+                    print(f"❌ No table mapping found for segment: '{segment_name}'")
             else:
                 print(f"⚠️ Campaign {campaign_id} not found in database, will use fallback")
                 
         except Exception as e:
             print(f"⚠️ Error fetching campaign details: {e}")
+            print(f"⚠️ Error type: {type(e).__name__}")
             emails_sent = 0
         
         # Update campaign status in database
@@ -257,14 +279,37 @@ async def start_campaign(request: CampaignStartRequest):
         table_name = TABLE_NAME_MAP.get(request.segment_name)
         total_customers = 0
         
+        print(f"🔍 Segment name received: '{request.segment_name}'")
+        print(f"🔍 Mapped table name: '{table_name}'")
+        print(f"🔍 Available mappings: {list(TABLE_NAME_MAP.keys())}")
+        
         if table_name:
             try:
-                result = supabase.table(table_name).select("customer_id", count="exact").execute()
+                # Try different counting methods
+                print(f"📊 Counting customers in table: {table_name}")
+                
+                # Method 1: Count with specific column
+                result = supabase.table(table_name).select("*", count="exact").execute()
                 total_customers = result.count if result.count is not None else 0
-                print(f"📊 Calculated {total_customers} customers in {request.segment_name} segment")
+                
+                print(f"📊 Method 1 - Count result: {result.count}")
+                print(f"📊 Method 1 - Data sample: {result.data[:2] if result.data else 'No data'}")
+                
+                # If Method 1 fails, try Method 2: Simple select
+                if total_customers == 0:
+                    result2 = supabase.table(table_name).select("customer_id").execute()
+                    total_customers = len(result2.data) if result2.data else 0
+                    print(f"📊 Method 2 - Manual count: {total_customers}")
+                
+                print(f"📊 Final calculated {total_customers} customers in {request.segment_name} segment")
+                
             except Exception as e:
                 print(f"⚠️ Error counting customers in {table_name}: {e}")
+                print(f"⚠️ Error type: {type(e).__name__}")
+                print(f"⚠️ Error details: {str(e)}")
                 total_customers = 0
+        else:
+            print(f"❌ No table mapping found for segment: '{request.segment_name}'")
         
         # Insert campaign log into database
         campaign_data = {
@@ -317,6 +362,57 @@ async def get_recent_campaigns(limit: int = 10):
         print(f"Error fetching recent campaigns: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch campaigns: {str(e)}")
 
+# --- Dashboard Statistics Endpoint ---
+@app.get("/dashboard/stats")
+async def get_dashboard_stats():
+    """
+    Get dashboard statistics including total customers and total messages sent
+    """
+    try:
+        # Get total customers from all segment tables
+        total_customers = 0
+        customer_counts = {}
+        
+        for segment_label, table_name in TABLE_NAME_MAP.items():
+            try:
+                result = supabase.table(table_name).select("*", count="exact").execute()
+                count = result.count if result.count is not None else 0
+                customer_counts[segment_label] = count
+                total_customers += count
+            except Exception as e:
+                print(f"⚠️ Error counting {segment_label}: {e}")
+                customer_counts[segment_label] = 0
+        
+        # Get total messages sent from campaign logs
+        try:
+            campaigns_result = supabase.table("campaign_logs")\
+                .select("emails_sent")\
+                .execute()
+            
+            total_messages_sent = 0
+            if campaigns_result.data:
+                for campaign in campaigns_result.data:
+                    emails_sent = campaign.get("emails_sent", 0)
+                    if emails_sent and emails_sent > 0:
+                        total_messages_sent += emails_sent
+                        
+            print(f"📧 Total messages sent calculated: {total_messages_sent}")
+                    
+        except Exception as e:
+            print(f"⚠️ Error calculating messages sent: {e}")
+            total_messages_sent = 0
+        
+        return {
+            "success": True,
+            "total_customers": total_customers,
+            "total_messages_sent": total_messages_sent,
+            "customer_counts": customer_counts
+        }
+        
+    except Exception as e:
+        print(f"❌ Error fetching dashboard stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch dashboard stats: {str(e)}")
+
 @app.get("/campaigns/{campaign_id}")
 async def get_campaign_status(campaign_id: str):
     """
@@ -355,10 +451,23 @@ async def get_customer_counts():
         
         for segment_label, table_name in TABLE_NAME_MAP.items():
             try:
-                # Count customers in each segment table
-                result = supabase.table(table_name).select("customer_id", count="exact").execute()
-                customer_counts[segment_label] = result.count if result.count is not None else 0
-                print(f"📊 {segment_label}: {customer_counts[segment_label]} customers")
+                print(f"🔍 Checking table: {table_name} for segment: {segment_label}")
+                
+                # Try multiple methods to count
+                # Method 1: Count exact
+                result = supabase.table(table_name).select("*", count="exact").execute()
+                count_method1 = result.count if result.count is not None else 0
+                
+                # Method 2: Manual count
+                result2 = supabase.table(table_name).select("customer_id").execute()
+                count_method2 = len(result2.data) if result2.data else 0
+                
+                # Use the higher count
+                final_count = max(count_method1, count_method2)
+                customer_counts[segment_label] = final_count
+                
+                print(f"📊 {segment_label}: Method1={count_method1}, Method2={count_method2}, Final={final_count}")
+                
             except Exception as e:
                 print(f"⚠️ Error counting {segment_label}: {e}")
                 customer_counts[segment_label] = 0
@@ -372,6 +481,48 @@ async def get_customer_counts():
     except Exception as e:
         print(f"❌ Error fetching customer counts: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch customer counts: {str(e)}")
+
+# --- Test Customer Count for Specific Segment ---
+@app.get("/test-count/{segment_name}")
+async def test_customer_count(segment_name: str):
+    """
+    Test customer count for a specific segment
+    """
+    try:
+        table_name = TABLE_NAME_MAP.get(segment_name)
+        if not table_name:
+            return {
+                "error": f"Segment '{segment_name}' not found",
+                "available_segments": list(TABLE_NAME_MAP.keys())
+            }
+        
+        print(f"🧪 Testing count for segment: '{segment_name}' → table: '{table_name}'")
+        
+        # Method 1: Count exact
+        result1 = supabase.table(table_name).select("*", count="exact").execute()
+        count1 = result1.count if result1.count is not None else 0
+        
+        # Method 2: Manual count
+        result2 = supabase.table(table_name).select("customer_id").execute()
+        count2 = len(result2.data) if result2.data else 0
+        
+        # Method 3: Count with limit
+        result3 = supabase.table(table_name).select("customer_id").limit(1000).execute()
+        count3 = len(result3.data) if result3.data else 0
+        
+        return {
+            "segment_name": segment_name,
+            "table_name": table_name,
+            "count_exact": count1,
+            "count_manual": count2,
+            "count_limited": count3,
+            "sample_data": result2.data[:3] if result2.data else [],
+            "recommended_count": max(count1, count2, count3)
+        }
+        
+    except Exception as e:
+        print(f"❌ Test count error: {e}")
+        return {"error": str(e), "segment": segment_name}
 
 # --- N8N Webhook Proxy Endpoint ---
 @app.post("/trigger-n8n-campaign")

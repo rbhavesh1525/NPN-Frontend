@@ -1,18 +1,11 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, Users, MessageSquare, ArrowRight } from "lucide-react";
+import { Users, Send, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/lib/utils";
 
 const actions = [
-  {
-    title: "Upload Customer Data",
-    description: "Import new CSV files with customer information",
-    icon: Upload,
-    href: createPageUrl("UploadData"),
-    color: "blue"
-  },
   {
     title: "Run Segmentation",
     description: "Analyze customers and create segments",
@@ -21,39 +14,39 @@ const actions = [
     color: "green"
   },
   {
-    title: "Generate Messages",
-    description: "Create targeted messages for segments",
-    icon: MessageSquare,
+    title: "Run Campaign",
+    description: "Create targeted campaigns for segments",
+    icon: Send,
     href: createPageUrl("MessageGeneration"),
     color: "purple"
   }
 ];
 
 export default function QuickActions() {
-  const colorClasses = {
-    blue: "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700",
-    green: "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
-    purple: "bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
-  };
-
   return (
-    <Card className="shadow-md border-0">
+    <Card className="shadow-md border-0 bg-white dark:bg-slate-800">
       <CardHeader>
         <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">Quick Actions</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {actions.map((action) => (
-          <Link key={action.title} to={action.href}>
-            <div className={`p-4 rounded-lg border transition-all duration-200 ${colorClasses[action.color]} dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <action.icon className="w-5 h-5" />
-                  <div>
-                    <h3 className="font-semibold">{action.title}</h3>
-                    <p className="text-sm opacity-70">{action.description}</p>
+          <Link key={action.title} to={action.href} className="block">
+            <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 transition-all duration-200">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center space-x-3 flex-1">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    action.color === 'green' ? 'bg-green-100 dark:bg-green-900' : 'bg-purple-100 dark:bg-purple-900'
+                  }`}>
+                    <action.icon className={`w-5 h-5 ${
+                      action.color === 'green' ? 'text-green-600 dark:text-green-400' : 'text-purple-600 dark:text-purple-400'
+                    }`} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 dark:text-white">{action.title}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">{action.description}</p>
                   </div>
                 </div>
-                <ArrowRight className="w-5 h-5 opacity-50" />
+                <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
               </div>
             </div>
           </Link>

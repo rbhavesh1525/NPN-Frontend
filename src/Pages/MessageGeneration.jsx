@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from "react";
 
-import { InvokeLLM } from "@/integrations/Core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import axios from "axios";
+import Modal from "@/components/ui/modal";
+import { supabase } from "@/lib/supabase";
 import { 
   MessageSquare, 
   Wand2, 
@@ -16,121 +15,189 @@ import {
   Users, 
   CheckCircle,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Loader2,
+  Loader
 } from "lucide-react";
 
-const SEGMENT_LABELS = {
-  high_value: "High Value Customers",
-  growth_potential: "Growth Potential",
-  risk_management: "Risk Management", 
-  basic_service: "Basic Service"
+
+const SEGMENT_LABELS = [
+  "New & Cautious",
+  "Stable Earners", 
+  "Mid-Tier Professionals",
+  "Affluent Customers",
+  "High-Value Elite"
+];
+
+// Map segment labels to table names
+const SEGMENT_TABLE_MAP = {
+  "New & Cautious": "new_and_cautious",
+  "Stable Earners": "stable_earners",
+  "Mid-Tier Professionals": "mid_tier_professionals", 
+  "Affluent Customers": "affluent_customers",
+  "High-Value Elite": "high_value_elite"
+};
+
+// Map segment labels to cluster names for bank products
+const SEGMENT_CLUSTER_MAP = {
+  "New & Cautious": "New & Cautious",
+  "Stable Earners": "Stable Earners",
+  "Mid-Tier Professionals": "Mid-Tier Professionals",
+  "Affluent Customers": "Affluent Customers",
+  "High-Value Elite": "High-Value Elite"
 };
 
  function MessageGeneration() {
-  const [customers, setCustomers] = useState([]);
+
   const [selectedSegment, setSelectedSegment] = useState("");
   const [campaignName, setCampaignName] = useState("");
-  const [generatedMessage, setGeneratedMessage] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [error, setError] = useState(null);
+  const [bankProducts, setBankProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
- const loadCustomers = async () => {
-  try {
-    const response = await axios.get("https://your-api-url/customers"); // your FastAPI endpoint
-    const customerData = response.data || [];
-    setCustomers(customerData);
-  } catch (err) {
-    setError("Error loading customer data");
-  }
-};
-
-
-  const getSegmentStats = () => {
-    const segmentCounts = customers.reduce((acc, customer) => {
-      const segment = customer.segment || 'unassigned';
-      acc[segment] = (acc[segment] || 0) + 1;
-      return acc;
-    }, {});
-    return segmentCounts;
+  // Fetch bank products based on selected segment
+  const fetchBankProducts = async (segment) => {
+    if (!segment) return;
+    
+    console.log('🔍 Fetching products for segment:', segment);
+    setLoadingProducts(true);
+    setError(null);
+    
+    try {
+      const clusterName = SEGMENT_CLUSTER_MAP[segment];
+      console.log('🎯 Cluster name mapped to:', clusterName);
+      
+      const { data, error } = await supabase
+        .from('bank_products')
+        .select('*')
+        .eq('cluster_name', clusterName)
+        .order('product_name', { ascending: true });
+      
+      console.log('📊 Supabase response:', { data, error });
+      
+      if (error) throw error;
+      
+      setBankProducts(data || []);
+      console.log('✅ Bank products set:', data?.length || 0, 'products');
+      
+    } catch (err) {
+      console.error('❌ Error fetching bank products:', err);
+      setError(`Failed to load bank products: ${err.message}`);
+      setBankProducts([]);
+    } finally {
+      setLoadingProducts(false);
+    }
   };
 
-  const generateMessage = async () => {
+  // Fetch bank products when segment changes
+  useEffect(() => {
+    if (selectedSegment) {
+      setSelectedProduct(""); // Reset product selection
+      fetchBankProducts(selectedSegment);
+    } else {
+      setBankProducts([]);
+      setSelectedProduct("");
+    }
+  }, [selectedSegment]);
+
+  const runCampaign = async () => {
     if (!selectedSegment) {
       setError("Please select a customer segment");
+      return;
+    }
+    if (!selectedProduct) {
+      setError("Please select a bank product");
+      return;
+    }
+    if (!campaignName.trim()) {
+      setError("Please enter a campaign name");
       return;
     }
 
     setIsGenerating(true);
     setError(null);
-    
+
     try {
-      const segmentCustomers = customers.filter(c => c.segment === selectedSegment);
-      const avgBalance = segmentCustomers.length
-  ? segmentCustomers.reduce((sum, c) => sum + (c.account_balance || 0), 0) / segmentCustomers.length
-  : 0;
+      console.log('🚀 Starting campaign...');
+      
+      // Step 1: Start campaign logging in backend
+      const campaignStartResponse = await fetch('http://localhost:8000/campaigns/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          campaign_name: campaignName,
+          segment_name: selectedSegment,
+          product_name: selectedProduct
+          // total_customers will be calculated by backend
+        })
+      });
 
-      const avgCreditScore = segmentCustomers.reduce((sum, c) => sum + (c.credit_score || 0), 0) / segmentCustomers.length;
-      
-      const prompt = `Generate a personalized marketing message for ${SEGMENT_LABELS[selectedSegment]} customers. 
-      
-      Segment characteristics:
-      - Average account balance: $${avgBalance.toLocaleString()}
-      - Average credit score: ${Math.round(avgCreditScore)}
-      - Number of customers: ${segmentCustomers.length}
-      
-      The message should be:
-      - Professional and banking-appropriate
-      - Personalized to this customer segment
-      - Include a clear call-to-action
-      - Be concise but engaging (max 150 words)
-      
-      Focus on relevant financial products or services that would benefit this customer segment.`;
+      if (!campaignStartResponse.ok) {
+        throw new Error('Failed to start campaign logging');
+      }
 
-      const result = await InvokeLLM({ prompt });
-      setGeneratedMessage(result);
+      const campaignData = await campaignStartResponse.json();
+      const campaignId = campaignData.campaign_id;
       
-    } catch (err) {
-      console.error(err);
-      setError("Error generating message. Please try again.");
+      console.log('📊 Campaign logged with ID:', campaignId);
+
+      // Step 2: Trigger n8n workflow
+      const n8nPayload = {
+        campaign_id: campaignId,
+        campaign_name: campaignName,
+        segment: selectedSegment,
+        segment_table: SEGMENT_TABLE_MAP[selectedSegment],
+        product_name: selectedProduct
+        // total_customers not needed in n8n payload
+      };
+
+      console.log('📤 Sending to n8n via backend proxy:', n8nPayload);
+
+      const n8nResponse = await fetch('http://localhost:8000/trigger-n8n-campaign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(n8nPayload)
+      });
+
+      if (!n8nResponse.ok) {
+        throw new Error(`n8n webhook failed: ${n8nResponse.status}`);
+      }
+
+      const result = await n8nResponse.json();
+      console.log('✅ n8n response:', result);
+
+      // Show success modal
+      setShowSuccessModal(true);
+      setCampaignResult({
+        campaign_id: campaignId,
+        campaign_name: campaignName,
+        segment: selectedSegment,
+        product: selectedProduct,
+        status: 'running'
+      });
+
+      // Reset form
+      setCampaignName("");
+      setSelectedSegment("");
+      setSelectedProduct("");
+
+    } catch (error) {
+      console.error('❌ Campaign error:', error);
+      setError(`Campaign failed: ${error.message}`);
+    } finally {
+      setIsGenerating(false);
     }
-    
-    setIsGenerating(false);
   };
 
-  const sendMessage = async () => {
-    if (!selectedSegment || !generatedMessage || !campaignName.trim()) {
-      setError("Please complete all fields before sending");
-      return;
-    }
-
-    setIsSending(true);
-    setError(null);
-   try {
-  const targetCustomers = customers.filter(c => c.segment === selectedSegment);
-
-  await axios.post("https://your-api-url/message-campaigns", {
-    campaign_name: campaignName,
-    target_segment: selectedSegment,
-    message_content: generatedMessage,
-    status: "sent",
-    customers_targeted: targetCustomers.length,
-    sent_date: new Date().toISOString().split("T")[0]
-  });
-} catch (err) {
-  console.error(err)
-  setError("Error creating message campaign");
-}
-    setIsSending(false);
-  };
-
-  const segmentStats = getSegmentStats();
-  const availableSegments = Object.keys(segmentStats).filter(s => s !== 'unassigned' && segmentStats[s] > 0);
+  const availableSegments = SEGMENT_LABELS;
 
   return (
     <div className="space-y-6">
@@ -147,15 +214,6 @@ const SEGMENT_LABELS = {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert className="border-green-200 bg-green-50 dark:bg-green-900/30">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800 dark:text-green-200">
-            Message campaign sent successfully to {customers.filter(c => c.segment === selectedSegment).length} customers!
-          </AlertDescription>
         </Alert>
       )}
 
@@ -192,52 +250,68 @@ const SEGMENT_LABELS = {
                   <SelectContent>
                     {availableSegments.map(segment => (
                       <SelectItem key={segment} value={segment}>
-                        {SEGMENT_LABELS[segment]} ({segmentStats[segment]} customers)
+                        {segment}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                  Bank Product
+                </label>
+                <Select 
+                  value={selectedProduct} 
+                  onValueChange={setSelectedProduct}
+                  disabled={!selectedSegment || loadingProducts}
+                >
+                  <SelectTrigger>
+                    <SelectValue 
+                      placeholder={
+                        loadingProducts 
+                          ? "Loading products..." 
+                          : selectedSegment 
+                            ? "Select bank product..." 
+                            : "Select segment first..."
+                      } 
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingProducts ? (
+                      <SelectItem value="loading" disabled>
+                        Loading products...
+                      </SelectItem>
+                    ) : (
+                      bankProducts.map(product => (
+                        <SelectItem key={product.product_id} value={product.product_name}>
+                          {product.product_name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button
-                onClick={generateMessage}
-                disabled={!selectedSegment || isGenerating}
+                onClick={runCampaign}
+                disabled={!selectedSegment || !selectedProduct || !campaignName.trim() || isGenerating}
                 className="w-full bg-purple-600 hover:bg-purple-700"
               >
-                <Wand2 className="w-4 h-4 mr-2" />
-                {isGenerating ? "Generating Message..." : "Generate AI Message"}
+                {isGenerating ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Running Campaign...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Run Campaign
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
-
-          {/* Generated Message */}
-          {generatedMessage && (
-            <Card className="shadow-md border-0">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" />
-                  Generated Message
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  value={generatedMessage}
-                  onChange={(e) => setGeneratedMessage(e.target.value)}
-                  rows={6}
-                  className="resize-none"
-                />
-                
-                <Button
-                  onClick={sendMessage}
-                  disabled={!campaignName.trim() || isSending}
-                  className="w-full bg-green-600 hover:bg-green-700"
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  {isSending ? "Sending..." : `Send to ${customers.filter(c => c.segment === selectedSegment).length} Customers`}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Segment Overview */}
@@ -263,11 +337,8 @@ const SEGMENT_LABELS = {
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {SEGMENT_LABELS[segment]}
+                        {segment}
                       </span>
-                      <Badge variant="outline">
-                        {segmentStats[segment]}
-                      </Badge>
                     </div>
                   </div>
                 ))
@@ -283,6 +354,32 @@ const SEGMENT_LABELS = {
           </Card>
         </div>
       </div>
+
+      {/* Success Modal Popup */}
+      <Modal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title="🎉 Success!"
+      >
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <CheckCircle className="w-12 h-12 text-green-500" />
+          </div>
+          <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Campaign "{campaignName}" Run Successfully!
+          </h4>
+          <p className="text-gray-600 dark:text-gray-400">
+            Product: <strong>{selectedProduct}</strong><br />
+            Segment: <strong>{selectedSegment}</strong>
+          </p>
+          <Button 
+            onClick={() => setShowSuccessModal(false)}
+            className="mt-4 bg-green-600 hover:bg-green-700"
+          >
+            Great!
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -3,8 +3,7 @@ import Layout from "./Layout";
 import Dashboard from "./Pages/Dashboard";
 import History from "./Pages/History";
 import MessageGeneration from "./Pages/MessageGeneration";
-import SegmentationResults from "./Pages/SegmentationResults";
-import UploadData from "./Pages/UploadData";
+import CustomerSegmentation from "./Pages/CustomerSegmentation";
 import SettingsPage from "./Pages/Settings";
 import SignupPage from "./Pages/Signup";
 import LoginPage from "./Pages/Login";
@@ -35,14 +34,9 @@ return(
           <Layout currentPageName="History"><History/></Layout>
         </ProtectedRoute>
       }/>
-      <Route path="/pages/segmentation-results" element={
+      <Route path="/pages/customer-segmentation" element={
         <ProtectedRoute>
-          <Layout currentPageName="SegmentationResults"><SegmentationResults/></Layout>
-        </ProtectedRoute>
-      }/>
-      <Route path="/pages/upload-data" element={
-        <ProtectedRoute>
-          <Layout currentPageName="UploadData"><UploadData /></Layout>
+          <Layout currentPageName="CustomerSegmentation"><CustomerSegmentation/></Layout>
         </ProtectedRoute>
       }/>
       <Route path="/pages/message-generation" element={

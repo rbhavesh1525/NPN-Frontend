@@ -1,0 +1,403 @@
+{
+  "name": "Customer Campaign with Success Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign-trigger",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [100, 200],
+      "id": "webhook-trigger",
+      "name": "Campaign Webhook",
+      "notes": "Receives: { \"segment\": \"table_name\", \"cluster_name\": \"1. New & Cautious\", \"product_name\": \"Personal Loan\", \"campaign_name\": \"Summer Campaign\" }"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "bank_products",
+        "limit": 50,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "product_name",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.product_name }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [300, 200],
+      "id": "fetch-bank-products",
+      "name": "Fetch Bank Products",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "={{ $('Campaign Webhook').item.json.body.segment }}",
+        "limit": 100
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [500, 200],
+      "id": "fetch-customers",
+      "name": "Fetch Customers",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine bank products with customer data for AI processing\nconst bankProducts = $('Fetch Bank Products').all();\nconst customers = $('Fetch Customers').all();\n\n// Create combined data for each customer\nconst combinedData = [];\n\nfor (const customer of customers) {\n  for (const product of bankProducts) {\n    combinedData.push({\n      // Customer info\n      customer_id: customer.json.customer_id,\n      customer_name: customer.json.name,\n      customer_email: customer.json.email,\n      customer_phone: customer.json.mobile_no || '',\n      customer_balance: customer.json.balance || 0,\n      customer_income: customer.json.income || 0,\n      persona_name: $('Campaign Webhook').item.json.body.cluster_name,\n      \n      // Product info\n      product_name: product.json.product_name,\n      product_description: product.json.description,\n      product_features: product.json.key_features,\n      product_benefits: product.json.key_features || '',\n      \n      // Campaign info\n      campaign_name: $('Campaign Webhook').item.json.body.campaign_name,\n      segment: $('Campaign Webhook').item.json.body.segment,\n      cluster_name: $('Campaign Webhook').item.json.body.cluster_name\n    });\n  }\n}\n\nreturn combinedData.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 200],
+      "id": "combine-data",
+      "name": "Combine Customer & Product Data"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 200],
+      "id": "process-individually",
+      "name": "Process Each Customer"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are an expert bank marketing copywriter. Your goal is to create an attractive, professional, and believable marketing email.\n\nCustomer Profile:\n- Name: {{ $json.customer_name }}\n- Persona: {{ $json.persona_name }}\n- Balance: ${{ $json.customer_balance }}\n- Income: ${{ $json.customer_income }}\n\nProduct Offer:\n- Product Name: {{ $json.product_name }}\n- Description: {{ $json.product_description }}\n- Key Features: {{ $json.product_features }}\n\nGenerate a personalized email body (max 200 words) that is professional and trustworthy with a clear call-to-action. Use the customer's name and make it feel personal.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [1100, 200],
+      "id": "generate-email-body",
+      "name": "Generate Email Body"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1100, 400],
+      "id": "gemini-model-body",
+      "name": "Gemini Model - Body",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Generate a compelling email subject line for this banking product marketing campaign:\n\nProduct: {{ $json.product_name }}\nCustomer Segment: {{ $json.persona_name }}\n\nCreate a subject line that is:\n- Maximum 60 characters\n- Attention-grabbing but professional \n- Relevant to the product and customer segment\n- Not spam-like\n\nReturn ONLY the subject line, nothing else.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [1300, 200],
+      "id": "generate-email-subject",
+      "name": "Generate Email Subject"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1300, 400],
+      "id": "gemini-model-subject",
+      "name": "Gemini Model - Subject",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine the email subject and body with customer info\nconst emailBody = $('Generate Email Body').first().json.text || '';\nconst emailSubject = $('Generate Email Subject').first().json.text || 'Exclusive Banking Offer';\n\n// Clean up the subject and body\nconst cleanSubject = emailSubject.replace(/[\"']/g, '').substring(0, 60);\nconst cleanBody = emailBody.replace(/[\"']/g, '');\n\n// Return the combined data\nreturn {\n  customer_email: $json.customer_email,\n  customer_name: $json.customer_name,\n  product_name: $json.product_name,\n  persona_name: $json.persona_name,\n  campaign_name: $json.campaign_name,\n  email_subject: cleanSubject,\n  email_body: cleanBody,\n  segment: $json.segment\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 200],
+      "id": "combine-email-parts",
+      "name": "Combine Email Parts"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.customer_email }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json.email_body }}",
+        "options": {
+          "ccList": "",
+          "bccList": "",
+          "replyTo": "noreply@yourbank.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1700, 200],
+      "id": "send-email",
+      "name": "Send Personalized Email",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "email_campaign_logs",
+        "rows": {
+          "values": {
+            "customer_email": "={{ $json.customer_email }}",
+            "customer_name": "={{ $json.customer_name }}",
+            "product_name": "={{ $json.product_name }}",
+            "persona_name": "={{ $json.persona_name }}",
+            "campaign_name": "={{ $json.campaign_name }}",
+            "email_subject": "={{ $json.email_subject }}",
+            "email_body": "={{ $json.email_body }}",
+            "sent_at": "={{ new Date().toISOString() }}",
+            "campaign_id": "={{ $json.campaign_name }}_{{ $json.segment }}_{{ new Date().getTime() }}",
+            "status": "sent"
+          }
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1900, 200],
+      "id": "log-email-sent",
+      "name": "Log Email Campaign",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count total emails sent in this campaign\nconst allLogs = $('Log Email Campaign').all();\nconst emailsSent = allLogs.length;\n\n// Get campaign info from webhook\nconst webhookData = $('Campaign Webhook').first().json.body;\n\n// Prepare success notification\nreturn {\n  campaign_id: `${webhookData.campaign_name}_${webhookData.segment}_${new Date().getTime()}`,\n  campaign_name: webhookData.campaign_name,\n  segment: webhookData.segment,\n  cluster_name: webhookData.cluster_name,\n  product_name: webhookData.product_name,\n  emails_sent: emailsSent,\n  status: 'completed',\n  completed_at: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 200],
+      "id": "prepare-success-notification",
+      "name": "Prepare Success Notification"
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:8000/campaign-success",
+        "options": {
+          "bodyContentType": "json",
+          "headers": {},
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": {},
+          "allowUnauthorizedCerts": false
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2300, 200],
+      "id": "notify-success",
+      "name": "Notify Campaign Success",
+      "notes": "Sends success notification to FastAPI backend"
+    }
+  ],
+  "connections": {
+    "Campaign Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Bank Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bank Products": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customers": {
+      "main": [
+        [
+          {
+            "node": "Combine Customer & Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Customer & Product Data": {
+      "main": [
+        [
+          {
+            "node": "Process Each Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Customer": {
+      "main": [
+        [
+          {
+            "node": "Prepare Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Email Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Email Body": {
+      "main": [
+        [
+          {
+            "node": "Generate Email Subject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Email Subject": {
+      "main": [
+        [
+          {
+            "node": "Combine Email Parts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Email Parts": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Personalized Email": {
+      "main": [
+        [
+          {
+            "node": "Log Email Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Email Campaign": {
+      "main": [
+        [
+          {
+            "node": "Process Each Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Notify Campaign Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Model - Body": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Email Body",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Model - Subject": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Email Subject",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

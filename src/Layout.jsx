@@ -37,13 +37,8 @@ const navigationItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Upload Data",
-    url: createPageUrl("UploadData"),
-    icon: Upload,
-  },
-  {
-    title: "Segmentation Results",
-    url: createPageUrl("SegmentationResults"),
+    title: "Customer Segmentation",
+    url: createPageUrl("CustomerSegmentation"),
     icon: Users,
   },
   {

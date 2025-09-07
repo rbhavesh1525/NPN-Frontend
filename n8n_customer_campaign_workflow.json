@@ -1,0 +1,354 @@
+{
+  "name": "Customer Segmentation Email Campaign",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign-trigger",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [100, 200],
+      "id": "webhook-trigger",
+      "name": "Campaign Webhook",
+      "notes": "Receives: { \"segment\": \"segment_table_name\", \"cluster_name\": \"1. New & Cautious\" }"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "bank_products",
+        "limit": 50,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cluster_name",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.cluster_name }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [300, 200],
+      "id": "fetch-bank-products",
+      "name": "Fetch Bank Products",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "={{ $('Campaign Webhook').item.json.body.segment }}",
+        "limit": 100
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [500, 200],
+      "id": "fetch-customers",
+      "name": "Fetch Customers",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine bank products with customer data for AI processing\nconst bankProducts = $('Fetch Bank Products').all();\nconst customers = $('Fetch Customers').all();\n\n// Create combined data for each customer\nconst combinedData = [];\n\nfor (const customer of customers) {\n  for (const product of bankProducts) {\n    combinedData.push({\n      // Customer info\n      customer_id: customer.json.customer_id,\n      customer_name: customer.json.name,\n      customer_email: customer.json.email,\n      customer_phone: customer.json.phone || '',\n      customer_balance: customer.json.balance || 0,\n      customer_income: customer.json.income || 0,\n      persona_name: $('Campaign Webhook').item.json.body.cluster_name,\n      \n      // Product info\n      product_name: product.json.product_name,\n      product_description: product.json.description,\n      product_features: product.json.key_features,\n      product_benefits: product.json.benefits || '',\n      \n      // For AI prompt\n      segment: $('Campaign Webhook').item.json.body.segment,\n      cluster_name: $('Campaign Webhook').item.json.body.cluster_name\n    });\n  }\n}\n\nreturn combinedData.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 200],
+      "id": "combine-data",
+      "name": "Combine Customer & Product Data"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 200],
+      "id": "process-individually",
+      "name": "Process Each Customer"
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "apiKey": "AIzaSyBtE4QUJl_4-LSZrlW6VZ4XxKk3csJyQAs",
+        "prompt": "You are an expert bank marketing copywriter. Your goal is to create an attractive, professional, and believable marketing email.\n\nCustomer Profile:\n- Name: {{ $json.customer_name }}\n- Persona: {{ $json.persona_name }}\n- Balance: ${{ $json.customer_balance }}\n- Income: ${{ $json.customer_income }}\n\nProduct Offer:\n- Product Name: {{ $json.product_name }}\n- Description: {{ $json.product_description }}\n- Key Features: {{ $json.product_features }}\n- Benefits: {{ $json.product_benefits }}\n\nGenerate a personalized email with:\n1. A compelling subject line (max 60 characters)\n2. A professional, trustworthy email body (max 200 words)\n3. Clear call-to-action\n\nFormat your response EXACTLY as:\nSUBJECT: [Your subject line]\nBODY: [Your email body with proper greeting using customer name]",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googlePalm",
+      "typeVersion": 1,
+      "position": [1100, 200],
+      "id": "generate-ai-message",
+      "name": "Generate AI Message"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the AI response to extract subject and body\nconst aiResponse = $json.response || '';\n\n// Split by 'BODY:' to separate subject and body\nconst parts = aiResponse.split('BODY:');\n\nlet subject = '';\nlet body = '';\n\nif (parts.length >= 2) {\n  subject = parts[0].replace('SUBJECT:', '').trim();\n  body = parts[1].trim();\n} else {\n  // Fallback if format is not as expected\n  subject = 'Exclusive Banking Offer for You';\n  body = aiResponse;\n}\n\n// Clean up the subject and body\nsubject = subject.replace(/[\"']/g, '').substring(0, 60);\nbody = body.replace(/[\"']/g, '');\n\n// Return the parsed data along with customer info\nreturn {\n  customer_email: $json.customer_email,\n  customer_name: $json.customer_name,\n  product_name: $json.product_name,\n  persona_name: $json.persona_name,\n  email_subject: subject,\n  email_body: body,\n  original_response: aiResponse\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 200],
+      "id": "parse-ai-response",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.customer_email }}",
+        "subject": "={{ $json.email_subject }}",
+        "message": "={{ $json.email_body }}",
+        "options": {
+          "ccList": "",
+          "bccList": "",
+          "replyTo": "noreply@yourbank.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1500, 200],
+      "id": "send-email",
+      "name": "Send Personalized Email",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "email_campaign_logs",
+        "rows": {
+          "values": {
+            "customer_email": "={{ $json.customer_email }}",
+            "customer_name": "={{ $json.customer_name }}",
+            "product_name": "={{ $json.product_name }}",
+            "persona_name": "={{ $json.persona_name }}",
+            "email_subject": "={{ $json.email_subject }}",
+            "email_body": "={{ $json.email_body }}",
+            "sent_at": "={{ new Date().toISOString() }}",
+            "campaign_id": "={{ $('Campaign Webhook').item.json.body.segment }}_{{ new Date().getTime() }}",
+            "status": "sent"
+          }
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1700, 200],
+      "id": "log-email-sent",
+      "name": "Log Email Campaign",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "error-condition",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 400],
+      "id": "check-for-errors",
+      "name": "Check for Errors"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "email_campaign_logs",
+        "rows": {
+          "values": {
+            "customer_email": "={{ $json.customer_email || 'unknown' }}",
+            "customer_name": "={{ $json.customer_name || 'unknown' }}",
+            "error_message": "={{ $json.error || 'Unknown error' }}",
+            "sent_at": "={{ new Date().toISOString() }}",
+            "campaign_id": "={{ $('Campaign Webhook').item.json.body.segment }}_{{ new Date().getTime() }}",
+            "status": "failed"
+          }
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1700, 400],
+      "id": "log-email-error",
+      "name": "Log Email Error",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Campaign Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Bank Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bank Products": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customers": {
+      "main": [
+        [
+          {
+            "node": "Combine Customer & Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Customer & Product Data": {
+      "main": [
+        [
+          {
+            "node": "Process Each Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Customer": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Generate AI Message": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check for Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Personalized Email": {
+      "main": [
+        [
+          {
+            "node": "Log Email Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Email Campaign": {
+      "main": [
+        [
+          {
+            "node": "Process Each Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Errors": {
+      "main": [
+        [
+          {
+            "node": "Log Email Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Log Email Error": {
+      "main": [
+        [
+          {
+            "node": "Process Each Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

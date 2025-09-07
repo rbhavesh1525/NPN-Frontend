@@ -58,6 +58,7 @@ const SEGMENT_CLUSTER_MAP = {
   const [error, setError] = useState(null);
   const [bankProducts, setBankProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [campaignResult, setCampaignResult] = useState(null);
 
   // Fetch bank products based on selected segment
   const fetchBankProducts = async (segment) => {
